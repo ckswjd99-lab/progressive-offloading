@@ -60,6 +60,12 @@ if __name__ == "__main__":
     print(f"Creating Gaussian Pyramid: {time.time() - start_time:.4f} sec")
     print([x.shape for x in gaussian_pyramid])
 
+    # Directly create the lowest Gaussian layer
+    start_time = time.time()
+    for _ in range(levels):
+        image = cv2.pyrDown(image)
+    print(f"Creating Lowest Gaussian Layer: {time.time() - start_time:.4f} sec")
+
     total_compressed_size = 0
     for level, gaussian in reversed(list(enumerate(gaussian_pyramid))):
         cv2.imwrite(f"output/Gaussian_Level_{level}.png", gaussian.astype(np.uint8))
