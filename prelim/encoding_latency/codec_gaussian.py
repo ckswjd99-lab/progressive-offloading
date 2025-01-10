@@ -40,15 +40,12 @@ def gaussian_pyramid_decode(gaussian_pyramid, target_level, original_shape):
     Returns:
         numpy.ndarray: Reconstructed image.
     """
-    image = gaussian_pyramid[target_level]
-    for i in range(target_level):
-        image = cv2.pyrUp(image).astype(np.int16)
-    return image[:original_shape[0], :original_shape[1], :original_shape[2]]
+    return gaussian_pyramid[target_level][:original_shape[0], :original_shape[1], :original_shape[2]]
 
 # Example usage:
 if __name__ == "__main__":
     image = cv2.imread("original.jpg")
-    image = cv2.resize(image, (512, 512))
+    image = cv2.resize(image, (224, 224))
     original_shape = image.shape
     print(f"Original image {original_shape}: {prod(original_shape):,d} Bytes with {image.dtype}")
 
@@ -61,10 +58,12 @@ if __name__ == "__main__":
     print([x.shape for x in gaussian_pyramid])
 
     # Directly create the lowest Gaussian layer
-    start_time = time.time()
-    for _ in range(levels):
-        image = cv2.pyrDown(image)
-    print(f"Creating Lowest Gaussian Layer: {time.time() - start_time:.4f} sec")
+    for lev in range(levels):
+        start_time = time.time()
+        lowimage = image
+        for _ in range(lev):
+            lowimage = cv2.pyrDown(image)
+        print(f"Creating Gaussian Layer {lev}: {time.time() - start_time:.4f} sec")
 
     total_compressed_size = 0
     for level, gaussian in reversed(list(enumerate(gaussian_pyramid))):

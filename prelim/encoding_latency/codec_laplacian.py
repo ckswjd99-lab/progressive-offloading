@@ -61,7 +61,7 @@ def laplacian_pyramid_decode(laplacian_pyramid, target_level):
 if __name__ == "__main__":
     # Load an image
     image = cv2.imread("original.jpg")
-    image = cv2.resize(image, (512, 512))  # Resize for simplicity
+    image = cv2.resize(image, (224, 224))  # Resize for simplicity
     original_shape = image.shape
     print(f"Original image {original_shape}: {prod(original_shape):,d} Bytes with {image.dtype}")
 

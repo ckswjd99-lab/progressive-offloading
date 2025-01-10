@@ -22,9 +22,9 @@ def subsampling_encode(image, levels):
     Returns:
         list: Subsampling pyramid (list of numpy arrays).
     """
-    subsampling_pyramid = [image.astype(np.int16)]
+    subsampling_pyramid = [image]
     for i in range(levels - 1):
-        image = image[::2, ::2].astype(np.int16)
+        image = image[::2, ::2]
         subsampling_pyramid.append(image)
 
     return subsampling_pyramid
@@ -52,7 +52,7 @@ def subsampling_decode(subsampling_pyramid, target_level, original_shape):
 # Example usage:
 if __name__ == "__main__":
     image = cv2.imread("original.jpg")
-    image = cv2.resize(image, (512, 512))
+    image = cv2.resize(image, (224, 224))
     original_shape = image.shape
     print(f"Original image {original_shape}: {prod(original_shape):,d} Bytes with {image.dtype}")
 

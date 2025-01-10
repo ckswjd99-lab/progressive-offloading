@@ -22,9 +22,9 @@ def average_pyramid_encode(image, levels):
     Returns:
         list: Average subsampling pyramid (list of numpy arrays).
     """
-    average_pyramid = [image.astype(np.int16)]
+    average_pyramid = [image]
     for i in range(levels - 1):
-        image = cv2.resize(image, (image.shape[1] // 2, image.shape[0] // 2), interpolation=cv2.INTER_AREA).astype(np.int16)
+        image = cv2.resize(image, (image.shape[1] // 2, image.shape[0] // 2), interpolation=cv2.INTER_AREA)
         average_pyramid.append(image)
     return average_pyramid
 
@@ -42,13 +42,13 @@ def average_pyramid_decode(average_pyramid, target_level, original_shape):
     """
     image = average_pyramid[target_level]
     for i in range(target_level):
-        image = cv2.resize(image, (image.shape[1] * 2, image.shape[0] * 2), interpolation=cv2.INTER_LINEAR).astype(np.int16)
+        image = cv2.resize(image, (image.shape[1] * 2, image.shape[0] * 2), interpolation=cv2.INTER_LINEAR)
     return image[:original_shape[0], :original_shape[1], :original_shape[2]]
 
 # Example usage:
 if __name__ == "__main__":
     image = cv2.imread("original.jpg")
-    image = cv2.resize(image, (512, 512))
+    image = cv2.resize(image, (224, 224))
     original_shape = image.shape
     print(f"Original image {original_shape}: {prod(original_shape):,d} Bytes with {image.dtype}")
 
