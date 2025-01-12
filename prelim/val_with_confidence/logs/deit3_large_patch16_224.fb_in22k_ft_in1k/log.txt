@@ -1,0 +1,204 @@
+[Model Info]
+ - MODEL    : deit3_large_patch16_224.fb_in22k_ft_in1k
+ - PARAMS   : 304,374,760
+ - LATENCY  : 0.0257
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val
+ - VAL LOSS : 0.5540
+ - VAL ACC  : 0.8680
+
+ - Thres (Minfail) : 0.5696
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.8328 |    0.0837 | 0.9165 | (acc. accepted: 90.86 %)
+    Not Conf. |   0.0353 |    0.0482 | 0.0835 |
+    Sum       |   0.8680 |    0.1320 | 1.0000 |
+
+ - Thres (Desired) : 0.0000
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.8680 |    0.1320 | 1.0000 | (acc. accepted: 86.80 %)
+    Not Conf. |   0.0000 |    0.0000 | 0.0000 |
+    Sum       |   0.8680 |    0.1320 | 1.0000 |
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/gaussian_2
+ - VAL LOSS : 0.8294
+ - VAL ACC  : 0.8060
+
+ - Thres (Minfail) : 0.5526
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.7625 |    0.1266 | 0.8891 | (acc. accepted: 85.76 %)
+    Not Conf. |   0.0435 |    0.0674 | 0.1109 |
+    Sum       |   0.8060 |    0.1940 | 1.0000 |
+
+ - Thres (Desired) : 0.6056
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.7466 |    0.1132 | 0.8599 | (acc. accepted: 86.83 %)
+    Not Conf. |   0.0593 |    0.0808 | 0.1401 |
+    Sum       |   0.8060 |    0.1940 | 1.0000 |
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/gaussian_4
+ - VAL LOSS : 1.4883
+ - VAL ACC  : 0.6799
+
+ - Thres (Minfail) : 0.6857
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.5770 |    0.1271 | 0.7041 | (acc. accepted: 81.95 %)
+    Not Conf. |   0.1029 |    0.1930 | 0.2959 |
+    Sum       |   0.6799 |    0.3201 | 1.0000 |
+
+ - Thres (Desired) : 0.8138
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.5056 |    0.0768 | 0.5824 | (acc. accepted: 86.81 %)
+    Not Conf. |   0.1743 |    0.2433 | 0.4176 |
+    Sum       |   0.6799 |    0.3201 | 1.0000 |
+
+ ! No threshold found for desired accuracy 0.8680
+ ! Using threshold_minfail: 0.8689
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/gaussian_8
+ - VAL LOSS : 4.1179
+ - VAL ACC  : 0.3107
+
+ - Thres (Minfail) : 0.8689
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.1367 |    0.0710 | 0.2077 | (acc. accepted: 65.83 %)
+    Not Conf. |   0.1740 |    0.6183 | 0.7923 |
+    Sum       |   0.3107 |    0.6893 | 1.0000 |
+
+ - Thres (Desired) : 0.8689
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.1367 |    0.0710 | 0.2077 | (acc. accepted: 65.83 %)
+    Not Conf. |   0.1740 |    0.6183 | 0.7923 |
+    Sum       |   0.3107 |    0.6893 | 1.0000 |
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/subsample_2
+ - VAL LOSS : 0.7842
+ - VAL ACC  : 0.8148
+
+ - Thres (Minfail) : 0.5225
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.7812 |    0.1295 | 0.9107 | (acc. accepted: 85.78 %)
+    Not Conf. |   0.0337 |    0.0557 | 0.0893 |
+    Sum       |   0.8148 |    0.1852 | 1.0000 |
+
+ - Thres (Desired) : 0.5706
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.7675 |    0.1165 | 0.8841 | (acc. accepted: 86.82 %)
+    Not Conf. |   0.0473 |    0.0687 | 0.1159 |
+    Sum       |   0.8148 |    0.1852 | 1.0000 |
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/subsample_4
+ - VAL LOSS : 1.2833
+ - VAL ACC  : 0.7156
+
+ - Thres (Minfail) : 0.6256
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.6374 |    0.1392 | 0.7767 | (acc. accepted: 82.07 %)
+    Not Conf. |   0.0781 |    0.1452 | 0.2233 |
+    Sum       |   0.7156 |    0.2844 | 1.0000 |
+
+ - Thres (Desired) : 0.7768
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.5692 |    0.0864 | 0.6556 | (acc. accepted: 86.82 %)
+    Not Conf. |   0.1464 |    0.1980 | 0.3444 |
+    Sum       |   0.7156 |    0.2844 | 1.0000 |
+
+ ! No threshold found for desired accuracy 0.8680
+ ! Using threshold_minfail: 0.8378
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/subsample_8
+ - VAL LOSS : 3.2001
+ - VAL ACC  : 0.4184
+
+ - Thres (Minfail) : 0.8378
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.2403 |    0.0868 | 0.3271 | (acc. accepted: 73.46 %)
+    Not Conf. |   0.1781 |    0.4948 | 0.6729 |
+    Sum       |   0.4184 |    0.5816 | 1.0000 |
+
+ - Thres (Desired) : 0.8378
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.2403 |    0.0868 | 0.3271 | (acc. accepted: 73.46 %)
+    Not Conf. |   0.1781 |    0.4948 | 0.6729 |
+    Sum       |   0.4184 |    0.5816 | 1.0000 |
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/avgsample_2
+ - VAL LOSS : 0.7904
+ - VAL ACC  : 0.8135
+
+ - Thres (Minfail) : 0.5706
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.7678 |    0.1187 | 0.8865 | (acc. accepted: 86.61 %)
+    Not Conf. |   0.0456 |    0.0678 | 0.1135 |
+    Sum       |   0.8135 |    0.1865 | 1.0000 |
+
+ - Thres (Desired) : 0.5806
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.7650 |    0.1161 | 0.8811 | (acc. accepted: 86.83 %)
+    Not Conf. |   0.0485 |    0.0704 | 0.1189 |
+    Sum       |   0.8135 |    0.1865 | 1.0000 |
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/avgsample_4
+ - VAL LOSS : 1.2276
+ - VAL ACC  : 0.7262
+
+ - Thres (Minfail) : 0.6276
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.6503 |    0.1375 | 0.7878 | (acc. accepted: 82.55 %)
+    Not Conf. |   0.0759 |    0.1363 | 0.2122 |
+    Sum       |   0.7262 |    0.2738 | 1.0000 |
+
+ - Thres (Desired) : 0.7638
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.5925 |    0.0900 | 0.6825 | (acc. accepted: 86.82 %)
+    Not Conf. |   0.1337 |    0.1838 | 0.3175 |
+    Sum       |   0.7262 |    0.2738 | 1.0000 |
+
+ ! No threshold found for desired accuracy 0.8680
+ ! Using threshold_minfail: 0.8128
+
+[Validation Result]
+ - DATASET  : /data/ImageNet-1k/val_sampled/avgsample_8
+ - VAL LOSS : 3.0044
+ - VAL ACC  : 0.4479
+
+ - Thres (Minfail) : 0.8128
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.2807 |    0.1072 | 0.3878 | (acc. accepted: 72.36 %)
+    Not Conf. |   0.1673 |    0.4449 | 0.6122 |
+    Sum       |   0.4479 |    0.5521 | 1.0000 |
+
+ - Thres (Desired) : 0.8128
+ - Confusion Matrix:
+              |  Correct | Incorrect |    Sum |
+    Confident |   0.2807 |    0.1072 | 0.3878 | (acc. accepted: 72.36 %)
+    Not Conf. |   0.1673 |    0.4449 | 0.6122 |
+    Sum       |   0.4479 |    0.5521 | 1.0000 |
+

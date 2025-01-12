@@ -17,12 +17,29 @@ from dataloader import get_imnet1k_dataloader
 BATCH_SIZE = 128
 LOG_DIR = './logs'
 
+DEVICE = 1
 
 model_list = [
-    # 'tiny_vit_5m_224.dist_in22k_ft_in1k',
     'caformer_b36.sail_in22k_ft_in1k',
+    'caformer_m36.sail_in22k_ft_in1k',
+    'caformer_s36.sail_in22k_ft_in1k',
+
+    # 'vit_huge_patch14_clip_224.laion2b_ft_in12k_in1k',
     # 'vit_large_patch14_clip_224.openai_ft_in12k_in1k',
-    # 'vgg11_bn.tv_in1k',
+    # 'vit_base_patch8_224.augreg2_in21k_ft_in1k',
+    
+    # 'convformer_b36.sail_in22k_ft_in1k',
+    # 'convformer_m36.sail_in22k_ft_in1k',
+    # 'convformer_s36.sail_in22k_ft_in1k',
+    
+    # 'deit3_huge_patch14_224.fb_in22k_ft_in1k',
+    # 'deit3_large_patch16_224.fb_in22k_ft_in1k',
+    # 'deit3_medium_patch16_224.fb_in22k_ft_in1k',
+    # 'deit3_small_patch16_224.fb_in22k_ft_in1k',
+    
+    # 'nextvit_base.bd_ssld_6m_in1k',
+    # 'resnet152.a1h_in1k',
+    # 'rexnetr_200.sw_in12k_ft_in1k',
 ]
 
 dataset_list = [
@@ -30,18 +47,18 @@ dataset_list = [
     '/data/ImageNet-1k/val_sampled/gaussian_2',
     '/data/ImageNet-1k/val_sampled/gaussian_4',
     '/data/ImageNet-1k/val_sampled/gaussian_8',
-    '/data/ImageNet-1k/val_sampled/gaussian_16',
+    # '/data/ImageNet-1k/val_sampled/gaussian_16',
     '/data/ImageNet-1k/val_sampled/subsample_2',
     '/data/ImageNet-1k/val_sampled/subsample_4',
     '/data/ImageNet-1k/val_sampled/subsample_8',
-    '/data/ImageNet-1k/val_sampled/subsample_16',
+    # '/data/ImageNet-1k/val_sampled/subsample_16',
     '/data/ImageNet-1k/val_sampled/avgsample_2',
     '/data/ImageNet-1k/val_sampled/avgsample_4',
     '/data/ImageNet-1k/val_sampled/avgsample_8',
-    '/data/ImageNet-1k/val_sampled/avgsample_16',
+    # '/data/ImageNet-1k/val_sampled/avgsample_16',
 ]
 
-criterion = nn.CrossEntropyLoss().cuda()
+criterion = nn.CrossEntropyLoss().cuda(DEVICE)
 
 def gaussian_subsample(img, level=1):
     # img: Tensor, shape (B, C, H, W)
@@ -58,7 +75,7 @@ def gaussian_subsample(img, level=1):
         for _ in range(level):
             newimage[i] = cv2.pyrUp(img[i])
 
-    img = torch.tensor(img).cuda().transpose(1, 3).transpose(2, 3).float()
+    img = torch.tensor(img).cuda(DEVICE).transpose(1, 3).transpose(2, 3).float()
 
     return img
 
@@ -76,7 +93,7 @@ def validate(test_loader, model, criterion):
     
     pbar = tqdm(test_loader, leave=False, total=len(test_loader))
     for data, target in pbar:
-        data, target = data.cuda(), target.cuda()
+        data, target = data.cuda(DEVICE), target.cuda(DEVICE)
         output = model(data)
         loss = criterion(output, target)
         
@@ -117,14 +134,14 @@ for mname in model_list:
     log_file_name = f'{log_dir_name}/log.txt'
     log_file = open(log_file_name, 'w')
 
-    model = timm.create_model(mname, pretrained=True, num_classes=1000).cuda()
+    model = timm.create_model(mname, pretrained=True, num_classes=1000).cuda(DEVICE)
     nparams = sum(p.numel() for p in model.parameters())
     
     # measure latency
     num_repeat = 100
     start_time = time.time()
     for _ in range(num_repeat):
-        model(torch.randn(1, 3, 224, 224).cuda())
+        model(torch.randn(1, 3, 224, 224).cuda(DEVICE))
     latency = (time.time() - start_time) / num_repeat
 
     log_file.write(
@@ -136,38 +153,75 @@ for mname in model_list:
     )
     log_file.flush()
 
+
+    desired_acc = 0
     
     for dataset in dataset_list:
 
-        _, val_loader = get_imnet1k_dataloader(root=dataset, batch_size=BATCH_SIZE, augmentation=False, val_only=True)
+        # validation
+        # pass if the probability data is saved
+        if os.path.exists(f'{log_dir_name}/npy/correct_probs_{os.path.basename(dataset)}.npy') and os.path.exists(f'{log_dir_name}/npy/incorrect_probs_{os.path.basename(dataset)}.npy'):
+            correct_probs = np.load(f'{log_dir_name}/npy/correct_probs_{os.path.basename(dataset)}.npy')
+            incorrect_probs = np.load(f'{log_dir_name}/npy/incorrect_probs_{os.path.basename(dataset)}.npy')
 
+            val_acc = (len(correct_probs) / (len(correct_probs) + len(incorrect_probs)))
+            val_loss = -1
 
-        val_loss, val_acc, additional_info = validate(val_loader, model, criterion)
+        else:
+            resize_big = (dataset == '/data/ImageNet-1k/val')
+            _, val_loader = get_imnet1k_dataloader(root=dataset, batch_size=BATCH_SIZE, resize_big=resize_big)
+            val_loss, val_acc, additional_info = validate(val_loader, model, criterion)
 
-        # draw histogram and save
-        # find the threshold of O and X confidence by Bayesian method
-        correct_probs = np.array(additional_info['correct_probs'])
-        incorrect_probs = np.array(additional_info['incorrect_probs'])
+            correct_probs = np.array(additional_info['correct_probs'])
+            incorrect_probs = np.array(additional_info['incorrect_probs'])
 
-        # Fit distributions to correct and incorrect probabilities
-        correct_mean, correct_std = np.mean(correct_probs), np.std(correct_probs)
-        incorrect_mean, incorrect_std = np.mean(incorrect_probs), np.std(incorrect_probs)
+            # save the probability data
+            if not os.path.exists(f'{log_dir_name}/npy'):
+                os.mkdir(f'{log_dir_name}/npy')
+            np.save(f'{log_dir_name}/npy/correct_probs_{os.path.basename(dataset)}.npy', correct_probs)
+            np.save(f'{log_dir_name}/npy/incorrect_probs_{os.path.basename(dataset)}.npy', incorrect_probs)
 
-        # Define CDFs for correct and incorrect
-        correct_cdf = lambda x: norm.cdf(x, loc=correct_mean, scale=correct_std)
-        incorrect_cdf = lambda x: norm.cdf(x, loc=incorrect_mean, scale=incorrect_std)
+        correct_cdf = lambda x: np.sum(correct_probs > x) / len(correct_probs)
+        incorrect_cdf = lambda x: np.sum(incorrect_probs > x) / len(incorrect_probs)
 
-        # Find priors based on data distribution
+        if str(os.path.basename(dataset)) == 'val':
+            desired_acc = val_acc
+            print(f"Val Acc: {val_acc:.4f}")
+
         P_A = len(correct_probs) / (len(correct_probs) + len(incorrect_probs))
-        P_B = len(incorrect_probs) / (len(correct_probs) + len(incorrect_probs))
+        P_B = 1 - P_A
 
         # Fine the threshold that minimizes the failure probability
-        def failure_probability(x):
-            return correct_cdf(x) * P_A + (1 - incorrect_cdf(x)) * P_B
+        def prob_failure(x):
+            return P_A * (1 - correct_cdf(x)) + P_B * incorrect_cdf(x)
+
+        def accepted_acc(x):
+            num_correct = np.sum(correct_probs > x)
+            num_incorrect = np.sum(incorrect_probs > x)
+
+            return num_correct / (num_correct + num_incorrect)
         
         thresholds = np.linspace(0, 1, 1000)
-        failure_probs = [failure_probability(t) for t in thresholds]
-        threshold = thresholds[np.argmin(failure_probs)]
+        failure_probs = [prob_failure(t) for t in thresholds]
+        accepted_accs = [accepted_acc(t) for t in thresholds]
+        
+        
+        threshold_minfail = thresholds[np.argmin(failure_probs)]
+        if max(accepted_accs) < desired_acc or len(accepted_accs) == 0:
+            threshold_desired = threshold_minfail
+            print(f'Using threshold_minfail: {threshold_minfail:.4f}')
+            log_file.write(
+                f" ! No threshold found for desired accuracy {desired_acc:.4f}\n"
+                f" ! Using threshold_minfail: {threshold_minfail:.4f}\n"
+                f"\n"
+            )
+        else:
+            for i in range(len(thresholds)):
+                if accepted_accs[i] >= desired_acc:
+                    threshold_desired = thresholds[i]
+                    break
+            print(f'Using threshold_desired: {threshold_desired:.4f}')
+        
 
         # Create histogram data
         correct_hist, correct_bins = np.histogram(correct_probs, bins=50, density=True)
@@ -180,7 +234,8 @@ for mname in model_list:
         # Plot the histogram
         plt.bar(correct_bins[:-1], correct_hist, width=correct_bins[1] - correct_bins[0], alpha=0.5, label=f'Correct: {val_acc:.4f}')
         plt.bar(incorrect_bins[:-1], incorrect_hist, width=incorrect_bins[1] - incorrect_bins[0], alpha=0.5, label=f'Incorrect: {1-val_acc:.4f}')
-        plt.axvline(threshold, color='r', linestyle='dashed', linewidth=1, label=f'Threshold: {threshold:.4f}')
+        plt.axvline(threshold_minfail, color='r', linestyle='dashed', linewidth=1, label=f'Threshold (minfail): {threshold_minfail:.4f}')
+        plt.axvline(threshold_desired, color='g', linestyle='dashed', linewidth=1, label=f'Threshold (desired): {threshold_desired:.4f}')
         plt.legend(loc='upper right')
         plt.title(f'Confidence Histogram - {dataset}')
         plt.xlabel('Confidence')
@@ -188,11 +243,19 @@ for mname in model_list:
         plt.savefig(f'{log_dir_name}/histogram_{os.path.basename(dataset)}.png')
         plt.close()
 
+        log_file.write(
+            f"[Validation Result]\n"
+            f" - DATASET  : {dataset}\n"
+            f" - VAL LOSS : {val_loss:.4f}\n"
+            f" - VAL ACC  : {val_acc:.4f}\n"
+            f"\n"
+        )
+
         num_total_prob = len(correct_probs) + len(incorrect_probs)
-        prob_tp = np.sum(correct_probs > threshold) / num_total_prob
-        prob_fp = np.sum(incorrect_probs > threshold) / num_total_prob
-        prob_tn = np.sum(incorrect_probs <= threshold) / num_total_prob
-        prob_fn = np.sum(correct_probs <= threshold) / num_total_prob
+        prob_tp = np.sum(correct_probs > threshold_minfail) / num_total_prob
+        prob_fp = np.sum(incorrect_probs > threshold_minfail) / num_total_prob
+        prob_tn = np.sum(incorrect_probs <= threshold_minfail) / num_total_prob
+        prob_fn = np.sum(correct_probs <= threshold_minfail) / num_total_prob
 
         prob_confident = prob_tp + prob_fp
         prob_not_confident = prob_tn + prob_fn
@@ -200,17 +263,32 @@ for mname in model_list:
         prob_incorrect = prob_fp + prob_tn
 
         log_file.write(
-            f"[Validation Result]\n"
-            f" - DATASET  : {dataset}\n"
-            f" - VAL LOSS : {val_loss:.4f}\n"
-            f" - VAL ACC  : {val_acc:.4f}\n"
-            f" - Threshold: {threshold:.4f} (lowest failure prob.)\n"
+            f" - Thres (Minfail) : {threshold_minfail:.4f}\n"
             f" - Confusion Matrix:\n"
             f"              |  Correct | Incorrect |    Sum |\n"
-            f"    Confident |   {prob_tp:6.4f} |    {prob_fp:6.4f} | {prob_confident:6.4f} |\n"
+            f"    Confident |   {prob_tp:6.4f} |    {prob_fp:6.4f} | {prob_confident:6.4f} | (acc. accepted: {prob_tp / prob_confident * 100:.2f} %)\n"
             f"    Not Conf. |   {prob_fn:6.4f} |    {prob_tn:6.4f} | {prob_not_confident:6.4f} |\n"
             f"    Sum       |   {prob_correct:6.4f} |    {prob_incorrect:6.4f} | {prob_correct + prob_incorrect:6.4f} |\n"
-            f" - F1 Score: {2 * np.sum(correct_probs > threshold) / (2 * np.sum(correct_probs > threshold) + np.sum(incorrect_probs > threshold) + np.sum(correct_probs <= threshold)):.4f}\n"
+            f"\n"
+        )
+
+        prob_tp = np.sum(correct_probs > threshold_desired) / num_total_prob
+        prob_fp = np.sum(incorrect_probs > threshold_desired) / num_total_prob
+        prob_tn = np.sum(incorrect_probs <= threshold_desired) / num_total_prob
+        prob_fn = np.sum(correct_probs <= threshold_desired) / num_total_prob
+
+        prob_confident = prob_tp + prob_fp
+        prob_not_confident = prob_tn + prob_fn
+        prob_correct = prob_tp + prob_fn
+        prob_incorrect = prob_fp + prob_tn
+
+        log_file.write(
+            f" - Thres (Desired) : {threshold_desired:.4f}\n"
+            f" - Confusion Matrix:\n"
+            f"              |  Correct | Incorrect |    Sum |\n"
+            f"    Confident |   {prob_tp:6.4f} |    {prob_fp:6.4f} | {prob_confident:6.4f} | (acc. accepted: {prob_tp / prob_confident * 100:.2f} %)\n"
+            f"    Not Conf. |   {prob_fn:6.4f} |    {prob_tn:6.4f} | {prob_not_confident:6.4f} |\n"
+            f"    Sum       |   {prob_correct:6.4f} |    {prob_incorrect:6.4f} | {prob_correct + prob_incorrect:6.4f} |\n"
             f"\n"
         )
 
