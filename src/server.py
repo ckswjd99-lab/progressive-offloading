@@ -38,7 +38,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def func_receive(server_port, queue_to_inference):
     socket_es = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_es.bind((SERVER_IP, server_port))
+    socket_es.bind((SELF_IP, server_port))
     socket_es.listen(1)
     print(f"[func_receive] Listening on {server_port}")
 
@@ -115,7 +115,7 @@ def func_inference(queue_from_es, queue_to_se, model_name=SERVER_MODELS[0]):
 
 def func_send(server_port, queue_from_inference):
     socket_se = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_se.bind((SERVER_IP, server_port))
+    socket_se.bind((SELF_IP, server_port))
     socket_se.listen(1)
     print(f"[func_send] Listening on {server_port}")
 
