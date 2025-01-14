@@ -14,25 +14,6 @@ from networks import recv_bytes, recv_int, recv_float, recv_ndarray, send_int, s
 from constants import *
 
 
-SERVER_MODELS = [
-    'caformer_b36.sail_in22k_ft_in1k',
-    'caformer_m36.sail_in22k_ft_in1k',
-    'caformer_s36.sail_in22k_ft_in1k',
-
-    'vit_huge_patch14_clip_224.laion2b_ft_in12k_in1k',
-    'vit_large_patch14_clip_224.openai_ft_in12k_in1k',
-    'vit_base_patch8_224.augreg2_in21k_ft_in1k',
-    
-    'convformer_b36.sail_in22k_ft_in1k',
-    'convformer_m36.sail_in22k_ft_in1k',
-    'convformer_s36.sail_in22k_ft_in1k',
-    
-    'deit3_huge_patch14_224.fb_in22k_ft_in1k',
-    'deit3_large_patch16_224.fb_in22k_ft_in1k',
-    'deit3_medium_patch16_224.fb_in22k_ft_in1k',
-    'deit3_small_patch16_224.fb_in22k_ft_in1k',
-]
-
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -83,7 +64,7 @@ def func_receive(server_port, queue_to_inference):
     socket_es.close()
 
 
-def func_inference(queue_from_es, queue_to_se, model_name=SERVER_MODELS[0]):
+def func_inference(queue_from_es, queue_to_se, model_name=SERVER_MODEL_NAME):
     model = timm.create_model(model_name, pretrained=True).to(DEVICE)
 
     preprocess = transforms.Compose([

@@ -16,15 +16,6 @@ from constants import *
 
 SAMPLE_IMAGE_PATH = './data/input.jpg'
 
-EDGE_MODEL_NAMES = [
-    'efficientvit_b0.r224_in1k',
-    'repghostnet_080.in1k',
-    'tf_mobilenetv3_large_075.in1k',
-    'mobilenetv3_small_050.lamb_in1k',
-    'efficientvit_m1.r224_in1k',
-    'vgg11_bn.tv_in1k',
-]
-
 def image_preprocess(image):
     if image.height < image.width:
         new_height = 256
@@ -199,7 +190,7 @@ def func_receive(queue_to_main, server_ip, server_port):
             raise ValueError('Invalid header')
         
 
-def run_offload(model_name=EDGE_MODEL_NAMES[0], num_repeat=NUM_REPEATS, meta_port=SERVER_PORT_META):
+def run_offload(model_name=EDGE_MODEL_NAME, num_repeat=NUM_REPEATS, meta_port=SERVER_PORT_META):
     mp.set_start_method('spawn')
 
     # Meta socket
@@ -229,7 +220,7 @@ def run_offload(model_name=EDGE_MODEL_NAMES[0], num_repeat=NUM_REPEATS, meta_por
 
     inference_results = []
 
-    for i in range(NUM_REPEATS):
+    for i in range(num_repeat):
         print(f"[run_offload] Offloading iter: {i+1}")
 
         # Sync clock
