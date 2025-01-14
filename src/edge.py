@@ -10,7 +10,7 @@ import cv2
 from PIL import Image
 
 from samplers import sample_gaussian, sample_selection, sample_average
-from networks import send_int, send_ndarray, recv_int, recv_ndarray, sync_clock_edge
+from networks import send_int, send_float, send_ndarray, recv_int, recv_float, recv_ndarray, sync_clock_edge
 from constants import *
 
 
@@ -55,13 +55,19 @@ def func_inference(queue_from_main, queue_to_offload, queue_to_main, model_name)
         if header == 'Finish':
             print(f"[func_inference] Finish")
             break
+
+        elif header == 'Clock':
+            server_lagging, time_start = image
+            print(f"[func_inference] Sync clock: {server_lagging * 1000:.6f} ms")
+
         else:
             image = torch.tensor(np.array(image)).permute(2, 0, 1).unsqueeze(0).float()  # torch.Tensor(1, 3, 224, 224)
-            print(f"[func_inference] Received image: {image.shape}")
+
+            timestamp = time.time() - time_start
+            print(f"[func_inference] Received image: {image.shape} at {timestamp * 1000:.6f} ms")
 
             output = model(image)
             output = output.detach().numpy() # np.ndarray(1, 1000)
-            # queue_to_offload.put(('Result', (-1, output)))
             queue_to_main.put(('Result', (-1, output)))
         
 
@@ -79,22 +85,31 @@ def func_sample(queue_from_main, queue_to_offload, sampler='average'):
         if header == 'Finish':
             print(f"[func_sample] Finish")
             break
+        
+        elif header == 'Clock':
+            server_lagging, time_start = image
+            print(f"[func_sample] Sync clock: {server_lagging * 1000:.6f} ms")
+
         else:
             print(f"[func_sample] Received image: {image.shape}")
 
             for level in range(3, -1, -1):
                 image_sampled = sample_func(image, level)
                 queue_to_offload.put(('Image', (level, image_sampled)))
-                print(f"[func_sample] Sampled image: {image_sampled.shape}")
+
+                timestamp = time.time() - time_start
+                print(f"[func_sample] Sampled image: {image_sampled.shape} at {timestamp * 1000:.6f} ms")
     
 
 def func_offload(queue_from_procs, server_ip, server_port, sampler='average'):
     socket_to_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_to_server.connect((server_ip, server_port))
-
-    server_lagging, time_start = sync_clock_edge(socket_to_server)
-
-    print(f"[func_offload] Connected to server {server_ip}:{server_port}, lagging {server_lagging * 1000:.6f} ms")
+    # try until connected
+    while True:
+        try:
+            socket_to_server.connect((server_ip, server_port))
+            break
+        except:
+            pass
 
     while True:
         received = queue_from_procs.get()
@@ -104,6 +119,15 @@ def func_offload(queue_from_procs, server_ip, server_port, sampler='average'):
             send_int(socket_to_server, HEADER_FINISH)
             print(f"[func_offload] Finish")
             break
+
+        elif header == 'Clock':
+            server_lagging, time_start = data
+
+            send_int(socket_to_server, HEADER_CLOCK)
+            send_float(socket_to_server, server_lagging)
+            send_float(socket_to_server, time_start)
+
+            print(f"[func_offload] Sync clock: {server_lagging * 1000:.6f} ms")
 
         elif header == 'Image':
             level, image = data
@@ -142,7 +166,13 @@ def func_offload(queue_from_procs, server_ip, server_port, sampler='average'):
 
 def func_receive(queue_to_main, server_ip, server_port):
     socket_from_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_from_server.connect((server_ip, server_port))
+    # try until connected
+    while True:
+        try:
+            socket_from_server.connect((server_ip, server_port))
+            break
+        except:
+            pass
 
     print(f"[func_receive] Connected to server {server_ip}:{server_port}")
 
@@ -154,6 +184,11 @@ def func_receive(queue_to_main, server_ip, server_port):
             queue_to_main.put(('Finish', None))
             break
 
+        elif header == HEADER_CLOCK:
+            server_lagging = recv_float(socket_from_server)
+            time_start = recv_float(socket_from_server)
+            print(f"[func_receive] Sync clock: {server_lagging * 1000:.6f} ms")
+
         elif header == HEADER_RESULT:
             level = recv_int(socket_from_server)
             result = recv_ndarray(socket_from_server)
@@ -164,12 +199,17 @@ def func_receive(queue_to_main, server_ip, server_port):
             raise ValueError('Invalid header')
         
 
-def run_offload(model_name=EDGE_MODEL_NAMES[0], num_repeat=NUM_REPEATS):
+def run_offload(model_name=EDGE_MODEL_NAMES[0], num_repeat=NUM_REPEATS, meta_port=SERVER_PORT_META):
     mp.set_start_method('spawn')
+
+    # Meta socket
+    socket_meta = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    socket_meta.connect((SERVER_IP, meta_port))
 
     image = image_preprocess(Image.open(SAMPLE_IMAGE_PATH))
     print(f"Image shape: {image.shape}")
 
+    # Create processes
     queue_to_inference = mp.Queue()
     queue_to_sample = mp.Queue()
     queue_to_offload = mp.Queue()
@@ -190,10 +230,23 @@ def run_offload(model_name=EDGE_MODEL_NAMES[0], num_repeat=NUM_REPEATS):
     inference_results = []
 
     for i in range(NUM_REPEATS):
-        print(f"[main] Offloading iter: {i+1}")
+        print(f"[run_offload] Offloading iter: {i+1}")
+
+        # Sync clock
+        server_lagging, time_start = sync_clock_edge(socket_meta)
+        print(f"[run_offload] Connected to server {SERVER_IP}:{meta_port}, lagging {server_lagging * 1000:.6f} ms")
+
+        queue_to_inference.put(('Clock', (server_lagging, time_start)))
+        queue_to_sample.put(('Clock', (server_lagging, time_start)))
+        queue_to_offload.put(('Clock', (server_lagging, time_start)))
+
+        # Start offloading
+        timestamp = time.time() - time_start
+        print(f"[run_offload] Loaded image {image.shape} at {timestamp * 1000:.6f} ms")
         queue_to_inference.put(('Image', image))
         queue_to_sample.put(('Image', image))
 
+        # Wait for results
         while True:
             received = queue_to_main.get()
             header, data = received
@@ -204,7 +257,9 @@ def run_offload(model_name=EDGE_MODEL_NAMES[0], num_repeat=NUM_REPEATS):
             elif header == 'Result':
                 level, result = data
                 inference_results.append((level, result))
-                print(f"[main] Received result: level {level} {result.shape}")
+
+                timestamp = time.time() - time_start
+                print(f"[run_offload] Received result: level {level} {result.shape} at {timestamp * 1000:.6f} ms")
 
                 if len(inference_results) == 5:
                     inference_results = []

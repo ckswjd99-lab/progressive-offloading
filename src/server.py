@@ -10,7 +10,7 @@ from torchvision import transforms
 import socket
 import cv2
 
-from networks import recv_bytes, recv_int, recv_ndarray, send_int, send_ndarray, sync_clock_server
+from networks import recv_bytes, recv_int, recv_float, recv_ndarray, send_int, send_float, send_ndarray, sync_clock_server
 from constants import *
 
 
@@ -44,9 +44,6 @@ def func_receive(server_port, queue_to_inference):
 
     conn, addr = socket_es.accept()
 
-    server_lagging, time_start = sync_clock_server(conn)
-    print(f"[func_receive] Connection from {addr}, lagging {server_lagging * 1000:.6f} ms")
-
     while True:
         header = recv_int(conn)
 
@@ -54,6 +51,13 @@ def func_receive(server_port, queue_to_inference):
             print("[func_receive] Finish")
             queue_to_inference.put((None, None))
             break
+
+        if header == HEADER_CLOCK:
+            server_lagging = recv_float(conn)
+            time_start = recv_float(conn)
+
+            queue_to_inference.put(('Clock', (server_lagging, time_start)))
+            print(f"[func_receive] Sync clock: {server_lagging * 1000:.6f} ms")
 
         elif header == HEADER_IMAGE:
             level = recv_int(conn)
@@ -73,7 +77,7 @@ def func_receive(server_port, queue_to_inference):
 
         else:
             print(f"[func_receive] Invalid header: {header}")
-            raise ValueError('Invalid header')
+            raise ValueError(f'Invalid header: {header}')
         
     conn.close()
     socket_es.close()
@@ -97,20 +101,25 @@ def func_inference(queue_from_es, queue_to_se, model_name=SERVER_MODELS[0]):
             print(f"[func_inference] Finish")
             queue_to_se.put(('Finish', None))
             break
-        image = image.astype(np.uint8)
-        # permute image to (B, C, H, W)
-        # image = np.transpose(image, (2, 0, 1))
-        # image = np.expand_dims(image, axis=0)
-        print(f"[func_inference] Processing image: level {level} {image.shape}")
-        image = Image.fromarray(image)
-        image = preprocess(image).unsqueeze(0).to(DEVICE)
 
-        with torch.no_grad():
-            result = model(image)
-            result = result.cpu().numpy()
+        elif level == 'Clock':
+            server_lagging, time_start = image
 
-        print(f"[func_inference] Processed image: level {level} {result.shape}")
-        queue_to_se.put(('Result', (level, result)))
+            queue_to_se.put(('Clock', (server_lagging, time_start)))
+            print(f"[func_inference] Sync clock: {server_lagging * 1000:.6f} ms")
+
+        else:
+            print(f"[func_inference] Processing image: level {level} {image.shape}")
+            image = image.astype(np.uint8)
+            image = Image.fromarray(image)
+            image = preprocess(image).unsqueeze(0).to(DEVICE)
+
+            with torch.no_grad():
+                result = model(image)
+                result = result.cpu().numpy()
+
+            print(f"[func_inference] Processed image: level {level} {result.shape}")
+            queue_to_se.put(('Result', (level, result)))
 
 
 def func_send(server_port, queue_from_inference):
@@ -130,6 +139,14 @@ def func_send(server_port, queue_from_inference):
             send_int(conn, HEADER_FINISH)
             print(f"[func_send] Finish")
             break
+
+        elif header == 'Clock':
+            server_lagging, time_start = data
+            print(f"[func_send] Sync clock: {server_lagging * 1000:.6f} ms")
+
+            send_int(conn, HEADER_CLOCK)
+            send_float(conn, server_lagging)
+            send_float(conn, time_start)
 
         elif header == 'Result':
             level, result = data
@@ -152,8 +169,17 @@ def func_send(server_port, queue_from_inference):
     socket_se.close()
         
 
-def run_server(server_port_es, server_port_se):
+def run_server(server_port_es, server_port_se, server_port_meta):
     mp.set_start_method('spawn')
+
+    socket_meta = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    socket_meta.bind((SELF_IP, server_port_meta))
+    socket_meta.listen(1)
+
+    conn, addr = socket_meta.accept()
+
+    server_lagging, time_start = sync_clock_server(conn)
+    print(f"[run_server] Connection from {addr}, lagging {server_lagging * 1000:.6f} ms")
 
     queue_to_inference = mp.Queue()
     queue_from_inference = mp.Queue()
@@ -166,9 +192,13 @@ def run_server(server_port_es, server_port_se):
     p_infer.start()
     p_se.start()
 
+    for _ in range(NUM_REPEATS-1):
+        server_lagging, time_start = sync_clock_server(conn)
+        print(f"[run_server] Connection from {addr}, lagging {server_lagging * 1000:.6f} ms")
+
     p_es.join()
     p_infer.join()
     p_se.join()
 
 if __name__ == '__main__':
-    run_server(SERVER_PORT_ES, SERVER_PORT_SE)
+    run_server(SERVER_PORT_ES, SERVER_PORT_SE, SERVER_PORT_META)
