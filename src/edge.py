@@ -10,13 +10,9 @@ import cv2
 from PIL import Image
 
 from samplers import sample_gaussian, sample_selection, sample_average
+from networks import send_int, send_ndarray, recv_int, recv_ndarray, sync_clock_edge
+from constants import *
 
-
-SERVER_IP = '127.0.0.1'
-SERVER_PORT_ES = 5000
-SERVER_PORT_SE = 5001
-
-NUM_REPEATS = 10
 
 SAMPLE_IMAGE_PATH = './data/input.jpg'
 
@@ -28,10 +24,6 @@ EDGE_MODEL_NAMES = [
     'efficientvit_m1.r224_in1k',
     'vgg11_bn.tv_in1k',
 ]
-
-HEADER_FINISH = 1000
-HEADER_IMAGE = 1001
-HEADER_RESULT = 1002
 
 def image_preprocess(image):
     if image.height < image.width:
@@ -51,19 +43,27 @@ def image_preprocess(image):
     return image
 
 
-def func_inference(queue_from_main, queue_to_offload, model_name):
+def func_inference(queue_from_main, queue_to_offload, queue_to_main, model_name):
     model = timm.create_model(model_name, pretrained=True)
     model.eval()
     print(f"[func_inference] Loaded model {model_name}")
 
-    image = queue_from_main.get()   # Pillow Image
-    image = torch.tensor(np.array(image)).permute(2, 0, 1).unsqueeze(0).float()  # torch.Tensor(1, 3, 224, 224)
-    print(f"[func_inference] Received image: {image.shape}")
+    while True:
+        data = queue_from_main.get()   # Pillow Image
+        header, image = data
 
-    output = model(image)
-    output = output.detach().numpy() # np.ndarray(1, 1000)
-    queue_to_offload.put(('Result', output))
-    print(f"[func_inference] Inference done")
+        if header == 'Finish':
+            print(f"[func_inference] Finish")
+            break
+        else:
+            image = torch.tensor(np.array(image)).permute(2, 0, 1).unsqueeze(0).float()  # torch.Tensor(1, 3, 224, 224)
+            print(f"[func_inference] Received image: {image.shape}")
+
+            output = model(image)
+            output = output.detach().numpy() # np.ndarray(1, 1000)
+            # queue_to_offload.put(('Result', (-1, output)))
+            queue_to_main.put(('Result', (-1, output)))
+        
 
 def func_sample(queue_from_main, queue_to_offload, sampler='average'):
     sample_func = {
@@ -71,47 +71,70 @@ def func_sample(queue_from_main, queue_to_offload, sampler='average'):
         'selection': sample_selection,
         'average': sample_average,
     }[sampler]
+    
+    while True:
+        data = queue_from_main.get()   # np.ndarray(3, 224, 224)
+        header, image = data
         
-    image = queue_from_main.get()   # np.ndarray(3, 224, 224)
-    print(f"[func_sample] Received image: {image.shape}")
+        if header == 'Finish':
+            print(f"[func_sample] Finish")
+            break
+        else:
+            print(f"[func_sample] Received image: {image.shape}")
 
-    for level in range(3, -1, -1):
-        image_sampled = sample_func(image, level)
-        queue_to_offload.put(('Image', image_sampled))
-        print(f"[func_sample] Sampled image: {image_sampled.shape}")
+            for level in range(3, -1, -1):
+                image_sampled = sample_func(image, level)
+                queue_to_offload.put(('Image', (level, image_sampled)))
+                print(f"[func_sample] Sampled image: {image_sampled.shape}")
+    
 
 def func_offload(queue_from_procs, server_ip, server_port, sampler='average'):
     socket_to_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     socket_to_server.connect((server_ip, server_port))
-    print(f"[func_offload] Connected to server {server_ip}:{server_port}")
+
+    server_lagging, time_start = sync_clock_edge(socket_to_server)
+
+    print(f"[func_offload] Connected to server {server_ip}:{server_port}, lagging {server_lagging * 1000:.6f} ms")
 
     while True:
         received = queue_from_procs.get()
         header, data = received
 
         if header == 'Finish':
+            send_int(socket_to_server, HEADER_FINISH)
             print(f"[func_offload] Finish")
             break
 
         elif header == 'Image':
-            # Send tensor
-            data = data.astype(np.float32)
-            bytedata = data.tobytes()
-            datasize = len(bytedata).to_bytes(4, 'big')
-            print(f"[func_offload] Sending image: {data.shape} ({len(bytedata)} bytes)")
+            level, image = data
+            image = image.astype(np.float32)
+            image_size = image.size
 
-            socket_to_server.send(HEADER_IMAGE.to_bytes(4, 'big'))
-            socket_to_server.send(datasize)
-            socket_to_server.send(bytedata)
+            time_elapsed = time.time() - time_start
+            print(f"[func_offload] Sending image: {image.shape} ({image_size:,d} bytes) at {time_elapsed * 1000:.6f} ms")
+
+            # Send header
+            send_int(socket_to_server, HEADER_IMAGE)
+            
+            # Send level
+            send_int(socket_to_server, level)
+
+            # Send data
+            send_ndarray(socket_to_server, image)
 
         elif header == 'Result':
-            print(f"[func_offload] Sending result: {data.shape}")
-            # Send result
-            bytedata = data.tobytes()
-            datasize = len(bytedata).to_bytes(4, 'big')
-            # socket_to_server.send(HEADER_RESULT.to_bytes(4, 'big'))
-            # socket_to_server.send(datasize)
-            # socket_to_server.send(bytedata)
+            level, result = data
+            print(f"[func_offload] Sending result: {result.shape}")
+            
+            # Send header
+            send_int(socket_to_server, HEADER_RESULT)
+
+            # Send level
+            send_int(socket_to_server, level)
+
+            # Send data
+            result = result.astype(np.float32)
+            send_ndarray(socket_to_server, result)
 
         else:
             raise ValueError('Invalid header')
@@ -120,6 +143,7 @@ def func_offload(queue_from_procs, server_ip, server_port, sampler='average'):
 def func_receive(queue_to_main, server_ip, server_port):
     socket_from_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     socket_from_server.connect((server_ip, server_port))
+
     print(f"[func_receive] Connected to server {server_ip}:{server_port}")
 
     while True:
@@ -127,33 +151,34 @@ def func_receive(queue_to_main, server_ip, server_port):
         header = int.from_bytes(received, 'big')
 
         if header == HEADER_FINISH:
-            queue_to_main.send(None)
+            queue_to_main.put(('Finish', None))
             break
 
         elif header == HEADER_RESULT:
-            received = socket_from_server.recv(4)
-            datasize = int.from_bytes(received, 'big')
-            received = socket_from_server.recv(datasize)
-            result = torch.tensor(np.frombuffer(received, dtype=np.float32).reshape(1, 1000))
-            queue_to_main.send(result)
+            level = recv_int(socket_from_server)
+            result = recv_ndarray(socket_from_server)
+            print(f"[func_receive] Received result: level {level} {result.shape}")
+            queue_to_main.put(('Result', (level, result)))
 
         else:
             raise ValueError('Invalid header')
         
 
-def run_offload(model_name=EDGE_MODEL_NAMES[-1]):
+def run_offload(model_name=EDGE_MODEL_NAMES[0], num_repeat=NUM_REPEATS):
+    mp.set_start_method('spawn')
+
     image = image_preprocess(Image.open(SAMPLE_IMAGE_PATH))
     print(f"Image shape: {image.shape}")
 
     queue_to_inference = mp.Queue()
     queue_to_sample = mp.Queue()
     queue_to_offload = mp.Queue()
-    queue_from_receiver = mp.Queue()
+    queue_to_main = mp.Queue()
 
-    proc_inference = mp.Process(target=func_inference, args=(queue_to_inference, queue_to_sample, model_name))
+    proc_inference = mp.Process(target=func_inference, args=(queue_to_inference, queue_to_offload, queue_to_main, model_name))
     proc_sample = mp.Process(target=func_sample, args=(queue_to_sample, queue_to_offload))
     proc_offload = mp.Process(target=func_offload, args=(queue_to_offload, SERVER_IP, SERVER_PORT_ES))
-    proc_receive = mp.Process(target=func_receive, args=(queue_from_receiver, SERVER_IP, SERVER_PORT_SE))
+    proc_receive = mp.Process(target=func_receive, args=(queue_to_main, SERVER_IP, SERVER_PORT_SE))
 
     proc_inference.start()
     proc_sample.start()
@@ -162,15 +187,37 @@ def run_offload(model_name=EDGE_MODEL_NAMES[-1]):
 
     time.sleep(1)
 
-    queue_to_inference.put(image)
-    queue_to_sample.put(image)
+    inference_results = []
 
-    while True:
-        received = queue_from_receiver.get()
-        if received is None:
-            break
+    for i in range(NUM_REPEATS):
+        print(f"[main] Offloading iter: {i+1}")
+        queue_to_inference.put(('Image', image))
+        queue_to_sample.put(('Image', image))
 
-        print(received)
+        while True:
+            received = queue_to_main.get()
+            header, data = received
+
+            if header == 'Finish':
+                print(f"Finish")
+                break
+            elif header == 'Result':
+                level, result = data
+                inference_results.append((level, result))
+                print(f"[main] Received result: level {level} {result.shape}")
+
+                if len(inference_results) == 5:
+                    inference_results = []
+                    queue_to_main.put(('Finish', None))
+            else:
+                raise ValueError('Invalid header')
+            
+        time.sleep(1)
+    
+    queue_to_offload.put(('Finish', None))
+    queue_to_inference.put(('Finish', None))
+    queue_to_sample.put(('Finish', None))
+        
 
     proc_inference.join()
     proc_sample.join()
@@ -179,5 +226,4 @@ def run_offload(model_name=EDGE_MODEL_NAMES[-1]):
 
 
 if __name__ == '__main__':
-    for _ in range(NUM_REPEATS):
-        run_offload()
+    run_offload()
